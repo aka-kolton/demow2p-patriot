@@ -3354,6 +3354,21 @@ function datesOf(o){
   const need=o.due?new Date(o.due+'T17:00'):null;
   return {placed,ready,start,prodDue,inHands,need,miss:need&&inHands>need};
 }
+function itemDates(o,g,v,D){
+  D=D||datesOf(o); const placed=D.placed;
+  const due=bizAdd(placed,gDays(g)+(o.proof?1:0)); if(+due>+D.prodDue) due.setTime(+D.prodDue);
+  const work=routeOf(g)==='label'||g.versions.length>4||gQty(g)>=100?2:1;
+  let start=bizBack(due,work); if(start<D.ready) start=new Date(D.ready);
+  const inHands=o.ship==='pickup'?due:o.ship==='together'?bizAdd(D.prodDue,TRANSIT):bizAdd(due,TRANSIT);
+  return {start,due,inHands};
+}
+function orderDates(o){
+  const D=datesOf(o), its=o.groups.flatMap(g=>g.versions.map(v=>({g,v,d:itemDates(o,g,v,D)})));
+  if(its.length){ D.start=new Date(Math.min(...its.map(x=>+x.d.start))); D.inHands=new Date(Math.max(...its.map(x=>+x.d.inHands))); D.miss=D.need&&D.inHands>D.need; }
+  D.items=its; return D;
+}
+const NOT_STARTED=['Queued','File needs fix','Proof ready','Changes requested','Checking files'];
+function dateGrid(rows){ return `<div class="dts">${rows.map(([l,d,cls,extra])=>`<span>${l}</span><b class="${cls||''}">${fmtDay(d)}${extra||''}</b>`).join('')}</div>`; }
 const totalOf=(o,a)=>o.fixedTotal!=null?o.fixedTotal:acctTotal(o,a);
 const MO3=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const fmtDay=d=>{ if(!d) return ''; const x=new Date(d); return `${MO3[x.getMonth()]} ${x.getDate()}, ${x.getFullYear()}`; };
@@ -3515,7 +3530,7 @@ function orderMatches(o,a,Q){
 }
 function filteredOrders(Q){
   const rows=allOrders().filter(({o,a})=>orderMatches(o,a,Q));
-  const S={start:(x,y)=>datesOf(x.o).start-datesOf(y.o).start,hands:(x,y)=>datesOf(x.o).inHands-datesOf(y.o).inHands,due:(x,y)=>dueOf(x.o)-dueOf(y.o),new:(x,y)=>(placedOf(y.o)||0)-(placedOf(x.o)||0),old:(x,y)=>(placedOf(x.o)||0)-(placedOf(y.o)||0),amt:(x,y)=>totalOf(y.o,y.a)-totalOf(x.o,x.a),num:(x,y)=>String(y.o.number||'').localeCompare(String(x.o.number||''))};
+  const S={start:(x,y)=>orderDates(x.o).start-orderDates(y.o).start,hands:(x,y)=>orderDates(x.o).inHands-orderDates(y.o).inHands,due:(x,y)=>dueOf(x.o)-dueOf(y.o),new:(x,y)=>(placedOf(y.o)||0)-(placedOf(x.o)||0),old:(x,y)=>(placedOf(x.o)||0)-(placedOf(y.o)||0),amt:(x,y)=>totalOf(y.o,y.a)-totalOf(x.o,x.a),num:(x,y)=>String(y.o.number||'').localeCompare(String(x.o.number||''))};
   return rows.sort(S[Q.sort]||S.due);
 }
 const matName=g=>{ const m=matById(g.material); return m?m.name:'Choose a material'; };
@@ -3536,17 +3551,15 @@ function ordersPage(){
         <td class="c-id"><button type="button" class="lnk num" data-bo="open" data-a="${a.id}" data-o="${o.id}">${esc((o.number||'Draft').replace('PBP-',''))}</button>${typeChip(a)}</td>
         <td><button type="button" class="lnk" data-bo="cust1" data-a="${a.id}">${esc(a.contact)}</button> <span class="note">(${esc(a.name)})</span><div>${esc(a.email)} <span class="cnt" title="Orders from this customer">${(ORD[a.id]||[]).length}</span></div>${o.po?`<div class="note">PO ${esc(o.po)}</div>`:''}</td>
         <td>${p?`<span class="note">Ordered</span> ${fmtDT(p)}`:'Not placed'}<div><b class="num">${money(totalOf(o,a))}</b> ${isUnpaid(o)?'<span class="stb s-crit sm">Unpaid</span>':''}</div></td>
-        <td>${o.status==='draft'?'':(()=>{ const D=datesOf(o), now=new Date(), startLate=o.status==='paid'&&['Queued','File needs fix','Proof ready','Changes requested','Checking files'].includes(orderStage(o))&&D.start<now;
-          return `<div class="dts"><span>Order due</span><b class="${D.miss?'late':''}">${fmtDay(D.need||D.inHands)}${D.miss?' · misses needed-by':''}</b>
-            <span>Prod. start</span><b class="${startLate?'warnt':''}">${fmtDay(D.start)}${startLate?' · start now':''}</b>
-            <span>Prod. due</span><b class="${late?'late':''}">${fmtDay(D.prodDue)}${late?' · late':''}</b>
-            <span>In hands</span><b>${fmtDay(D.inHands)} <small>${o.ship==='pickup'?'pickup':'est.'}</small></b></div>`; })()}</td>
+        <td>${o.status==='draft'?'':(()=>{ const D=orderDates(o), now=new Date(), startLate=o.status==='paid'&&NOT_STARTED.includes(orderStage(o))&&D.start<now;
+          return dateGrid([['Order due',D.need||D.inHands,D.miss?'late':'',D.miss?' · misses needed-by':''],['Prod. start',D.start,startLate?'warnt':'',startLate?' · start now':''],['Prod. due',D.prodDue,late?'late':'',late?' · late':''],['In hands',D.inHands,'',` <small>${o.ship==='pickup'?'pickup':'est.'}</small>`]]); })()}</td>
         <td><span class="stb ${cls}">${esc(st)}</span>${iss?`<div class="note crit">${esc(o.issue.type)}</div>`:''}${o.cancelUntil&&Date.now()<o.cancelUntil?`<div class="note">${clock('cancel',o.cancelUntil)}</div>`:''}</td>
         <td class="c-act">${quickActs(o,a)}</td></tr>
       ${col?'':items.map(({g,v})=>`<tr class="it"><td></td><td class="num note">${v.line||''}</td>
         <td colspan="1"><div class="itm"><span class="th">${v.art?`<img src="${v.art.src}" alt="">`:''}</span><span><b class="lnk">${esc(matName(g))}</b><div class="note">Size: <b>${esc(sizeLbl(g,v))}</b> (Name: ${esc(trunc(v.name,28))})${g.fin.length?' · '+esc(finTxt(g)):''}${g.turn!=='std'?` · <span class="crit">${esc(turnById(g.turn).label)}</span>`:''}</div>${v.fileIssue?`<div class="note crit">${esc(v.fileIssue)}</div>`:''}${v.changeNote?`<div class="note warn">Customer: "${esc(trunc(v.changeNote,70))}"</div>`:''}</span></div></td>
         <td><span class="num">${pcs(v.qty)} Qty</span><div class="num note">${withAcct(a,()=>money(vTotal(g,v)))}</div></td>
-        <td>${o.status==='draft'?'':`Production: ${fmtDay(due)}`}</td>
+        <td>${o.status==='draft'?'':(()=>{ const d=itemDates(o,g,v), now=new Date(), st=itemStage(v), open=o.status==='paid', sl=open&&NOT_STARTED.includes(st)&&d.start<now, lt=open&&!['Ready','Shipped','Picked up'].includes(st)&&d.due<now;
+          return dateGrid([['Prod. start',d.start,sl?'warnt':'',sl?' · start now':''],['Prod. due',d.due,lt?'late':'',lt?' · late':''],['In hands',d.inHands,'',` <small>${o.ship==='pickup'?'pickup':'est.'}</small>`]]); })()}</td>
         <td><div class="istat">${o.status==='draft'?'':itemBadge(v)}<label class="dept d-${deptOf(g,v)}" title="Set automatically from the product. Pick another to reassign."><span>Dept:</span><select data-dept="${o.id}|${v.id}" aria-label="Department">${DEPTS.map(([k,l])=>`<option value="${k}"${deptOf(g,v)===k?' selected':''}>${l}</option>`).join('')}</select></label></div></td>
         <td class="c-act">${itemActs(o,a,g,v)}</td></tr>`).join('')}
       <tr class="of"><td></td><td colspan="6"><span class="note">Payment: ${o.paidBy==='link'&&isUnpaid(o)?'Payment link sent, not paid yet':o.paidBy==='pickup'&&isUnpaid(o)?'Collect at pickup':o.status==='draft'||o.status==='approval'?'Not placed':'Credit card'} · Shipping: ${o.ship==='pickup'?'Local pickup':esc(SHIP[o.ship].label)}${o.blind?' · Blind ship':''} · ${o.proof?'Proof requested':'No proof'}${o.staffNotes?' · Note: '+esc(trunc(o.staffNotes,60)):''}</span></td></tr></tbody>`; }).join('');
