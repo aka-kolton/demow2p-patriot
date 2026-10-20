@@ -692,6 +692,7 @@ body.staff #modeBtn{background:var(--red);border-color:var(--red);color:#fff}
 .qacts{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.qrow{display:flex;gap:4px;align-items:center}
 .qa{width:30px;height:30px;display:grid;place-items:center;border:1px solid var(--line);background:#fff;border-radius:6px;cursor:pointer;color:var(--accent);padding:0}
 .qa svg{width:15px;height:15px}.qa.good{color:var(--good)}.qa.good:hover{border-color:var(--good)}
+.cardrow{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2)}
 .dts{display:grid;grid-template-columns:auto auto;gap:1px 8px;font-size:12.5px;align-items:baseline}.dts span{color:var(--ink-3);font-size:11.5px;white-space:nowrap}.dts b{font-weight:600;white-space:nowrap}.dts small{color:var(--ink-3);font-weight:500}.warnt{color:#b45309!important}
 .istat{display:flex;flex-direction:column;gap:5px;align-items:flex-start}
 .otbl .dept select{width:auto!important;max-width:150px;flex:none}.otbl .qrow select.cell{width:auto!important;flex:none}.dept{width:auto!important;max-width:100%}.qa:hover{border-color:var(--accent);background:var(--accent-soft)}.qa.warn{color:var(--crit)}.qa.warn:hover{border-color:var(--crit)}
@@ -819,6 +820,8 @@ const ROLES={admin:{label:'Admin',note:'Manages the team, approves orders'},mana
 let ACCOUNT={
   id:'a1',type:'trade',status:'approved',contact:'Dana Ortiz',email:'dana@demosignco.com',since:'Mar 2025',credits:40,ledger:[],pastSpend:9120,
   name:'Demo Sign Co.',terms:'Card on file',me:'u1',
+  card:{brand:'Visa',last4:'4242',exp:'08/28',saved:'Mar 2025'},
+  tax:{exempt:true,cert:'demo-sign-co-resale-01-339.pdf',kind:'Texas resale certificate, blanket',on:'Mar 2025',status:'approved'},
   users:[{id:'u1',name:'Dana Ortiz',email:'dana@demosignco.com',role:'admin'},{id:'u2',name:'Marcus Lee',email:'marcus@demosignco.com',role:'manager'},
          {id:'u3',name:'Jess Park',email:'jess@demosignco.com',role:'buyer'},{id:'u4',name:'Ty Nguyen',email:'ty@demosignco.com',role:'viewer'}],
   rules:{buyersAlways:false,over:500},
@@ -1272,6 +1275,8 @@ const notesField=(id,val,dis,who)=>`<div class="f"><label for="${id}">Your notes
 function staffBlock(t){
   return `<div class="pb staffb"><h3><span>Staff only</span><span>${typeChip(ACCOUNT)} ${esc(ACCOUNT.name)}</span></h3>
     <div class="f"><label for="p-staffnotes">Production notes</label><textarea id="p-staffnotes" rows="2" placeholder="Packing, install, rush, anything the floor should know">${esc(t.staffNotes||'')}</textarea><span class="hint">Production sees these on the job ticket. Customers never do.</span></div>
+    <div class="row2"><div class="f"><label for="p-taxo">Sales tax</label><select id="p-taxo"${t.status!=='draft'?' disabled':''}><option value="auto"${t.taxExempt==null?' selected':''}>Account default (${ACCOUNT.tax&&ACCOUNT.tax.exempt?'exempt':'taxable'})</option><option value="exempt"${t.taxExempt===true?' selected':''}>Exempt this order</option><option value="charge"${t.taxExempt===false?' selected':''}>Charge tax on this order</option></select></div>
+      <div class="f"><span class="flabel">Card</span><span style="font-size:13px">${ACCOUNT.card?`${esc(ACCOUNT.card.brand)} ending ${esc(ACCOUNT.card.last4)}`:'None saved'}</span></div></div>
     <div class="row2"><div class="f"><label for="p-disc">Discount on this order (%)</label><input type="number" id="p-disc" min="0" max="100" step="1" value="${t.disc||0}"></div>
       <div class="f"><span class="flabel">Customer</span><span style="font-size:13px">${esc(ACCOUNT.contact)}<br><span class="note">${esc(ACCOUNT.email)} · ${pcs(ACCOUNT.credits)} AI credits</span></span></div></div>
     <div class="acts">${t.status==='draft'?'<button class="btn sm" type="button" data-act="sendquote">Email as a quote</button>':''}${t.status==='paid'?'<button class="btn sm" type="button" data-act="flag">Flag an issue</button><button class="btn sm" type="button" data-act="toprod">Open production queue</button>':''}${t.quoted?'<span class="chip st-info">Quote sent</span>':''}</div></div>`;
@@ -1842,26 +1847,41 @@ function renderReview(focus){
         <label class="check"><input type="checkbox" id="rv-blind"${t.blind?' checked':''}> Blind ship: plain box, your ship-from address, no prices inside</label></div>`;
     foot=`<button class="btn" type="button" data-m="rv-back">Back</button><span class="grow note" id="rv-missnote">${missing.length?`Add ${missing.length===1?'the address':missing.length+' addresses'} to continue.`:''}</span><button class="btn pri" type="button" data-m="rv-next"${missing.length?' disabled':''}>Continue to payment</button>`;
   } else {
-    const label=appr?'Send for approval':MODE==='staff'?`Place order · ${money(sub+est)}`:`Pay ${money(sub+est)} by card`;
+    if(MODE==='staff'&&!ACCOUNT.card&&c.pay==='card') c.pay='link';
+    const TX=taxFor(t,sub,est), grand=sub+est+TX.amt, A=ACCOUNT, newCard=c.pay==='newcard'||!A.card;
+    const label=appr?'Send for approval':MODE==='staff'?`Place order · ${money(grand)}`:`Pay ${money(grand)}`;
     body=`<div class="pb"><div class="lines"><div class="line"><span>Items</span><span>${money(sub)}</span></div>
         <div class="line"><span>${t.ship==='pickup'?'Pickup in Arlington':`UPS Ground, estimate, ${nShip} address${nShip===1?'':'es'}`}</span><span>${t.ship==='pickup'?'Free':money(est)}</span></div>
-        <div class="line tot"><span>Total before tax</span><span>${money(sub+est)}</span></div></div>
+        <div class="line"><span>${esc(TX.label)}</span><span>${money(TX.amt)}</span></div>
+        <div class="line tot"><span>Total</span><span>${money(grand)}</span></div></div>
+      <p class="note">Stripe Tax works out the exact tax from the ship-to address when you pay.${A.type==='trade'&&A.tax&&A.tax.status==='review'?' Your resale certificate is in review. Once it\'s approved, orders come through without tax.':''}${A.type==='trade'&&!(A.tax&&(A.tax.exempt||A.tax.status==='review'))?' Reselling this? <button class="btn link" type="button" data-m="go-billing">Add your resale certificate</button> to stop paying tax on resale orders.':''}</p>
       <label class="check"><input type="checkbox" id="proof"${proof?' checked':''}> Send me a proof before printing <span>Adds 1 business day</span></label>${lateW}
       <p class="note terms">${proof?'':'Without a proof, we print your files as sent. '}Free reprints cover our production mistakes. They don't cover file issues like misspelled words, overprints, missing fonts or links, or low resolution.</p></div>
     <div class="pb">${appr?`<div class="callout warn"><b>This order needs approval.</b><span>${ACCOUNT.rules.buyersAlways?'Buyers on your account need approval for every order.':`Orders over ${money(ACCOUNT.rules.over)} need a manager's approval.`} We'll notify ${ACCOUNT.users.filter(u=>['admin','manager'].includes(u.role)).map(u=>esc(u.name)).join(' and ')}.</span></div>`
       :`<div class="f"><span class="flabel">Payment</span><div class="radios">
-        ${MODE==='staff'?[['card','Charge card on file','Card ending 4242 for '+esc(ACCOUNT.name)],['link','Email a payment link','Sent to '+esc(ACCOUNT.email)+'. Production starts when they pay.'],['pickup','Collect at pickup','Card or cash at the counter']].map(([k,l,n])=>`<label class="radio"><input type="radio" name="rvpay" value="${k}"${c.pay===k?' checked':''}><span>${l}<small>${n}</small></span></label>`).join('')
-        :`<label class="radio"><input type="radio" name="rvpay" value="card" checked><span>Credit card<small>Pay at checkout. In the live store this opens Stripe Checkout.</small></span></label>`}</div></div>`}
+        ${MODE==='staff'?[...(ACCOUNT.card?[['card',`Charge ${ACCOUNT.card.brand} ending ${ACCOUNT.card.last4}`,'Saved card for '+esc(ACCOUNT.name)+'. No checkout page needed.']]:[]),['link','Email a payment link','Sent to '+esc(ACCOUNT.email)+'. Production starts when they pay.'],['pickup','Collect at pickup','Card or cash at the counter']].map(([k,l,n])=>`<label class="radio"><input type="radio" name="rvpay" value="${k}"${c.pay===k?' checked':''}><span>${l}<small>${n}</small></span></label>`).join('')
+        :`${A.card?`<label class="radio"><input type="radio" name="rvpay" value="card"${!newCard?' checked':''}><span>${esc(A.card.brand)} ending ${esc(A.card.last4)}<small>Saved card, expires ${esc(A.card.exp)}. Stripe Checkout fills it in, you just confirm.</small></span></label>`:''}
+          <label class="radio"><input type="radio" name="rvpay" value="newcard"${newCard?' checked':''}><span>${A.card?'Use a different card':'Credit card'}<small>Opens Stripe Checkout.</small></span></label>
+          ${newCard?`<label class="check"><input type="checkbox" id="rv-save"${c.saveCard!==false?' checked':''}> Save this card for future orders</label><p class="note" style="margin:-4px 0 0 26px">Patriot keeps it on file with Stripe and can charge it for orders you place. Remove it any time under Billing.</p>`:''}`}</div></div>`}
       <div><div class="flabel" style="margin-bottom:4px">What happens next</div><ol class="steps">
         ${appr?'<li>A manager approves it. Then it comes to us automatically.</li>':''}
         <li>We check every file automatically as soon as you submit. If one doesn't pass, we email you so you can upload a fix.</li>
         <li>${proof?'You get an email with a proof link, and you can also approve it on this order. Proofs don\'t expire. We send reminders until you approve.':`You have ${CANCEL_MIN} minutes to cancel or change the order. Then it goes to print.`}</li>
         <li>Files that pass${proof?' and proofs approved':''} by ${cutHr()} start today.</li>
         <li>We print, then you get ${t.ship==='pickup'?'a pickup notice':'tracking for each shipment by email'}.</li></ol></div></div>`;
-    foot=`<button class="btn" type="button" data-m="rv-back">Back</button><span class="grow"></span><button class="btn pri" type="button" data-m="${appr?'ask':c.pay}">${label}</button>`;
+    foot=`<button class="btn" type="button" data-m="rv-back">Back</button><span class="grow"></span><button class="btn pri" type="button" data-m="${appr?'ask':MODE==='staff'?c.pay:(newCard?'newcard':'card')}">${label}</button>`;
   }
   modal.innerHTML=`<div class="ph"><div class="eyebrow"><span>Checkout · Step ${c.step} of 3</span><span>${esc(t.name)}</span></div><h2 tabindex="-1">${STEPS[c.step-1]}</h2>${stepper}</div>${body}<div class="mf">${foot}</div>`;
   const f=focus&&document.getElementById(focus); if(f) f.focus(); else modal.querySelector('h2').focus();
+}
+/* Sales tax: Stripe Tax calculates the real number at checkout. This is the demo estimate (Arlington, TX 8.25%). */
+const TAX_RATE=.0825;
+function taxFor(t,sub,est){
+  const A=ACCOUNT, exempt=t.taxExempt===true||(t.taxExempt!==false&&A.tax&&A.tax.exempt&&A.tax.status==='approved');
+  if(exempt) return {amt:0,label:t.taxExempt===true&&!(A.tax&&A.tax.exempt)?'Exempt, set by Patriot staff':'Exempt, resale certificate on file'};
+  const inTX=t.ship==='pickup'||t.shipTos.some(x=>/\bTX\b|Texas/i.test(x.addr||''));
+  if(!inTX) return {amt:0,label:'Not collected for this state'};
+  return {amt:Math.round((sub+est)*TAX_RATE*100)/100,label:'Sales tax, est. 8.25%'};
 }
 function submitOrder(t,how,proof){
   t.status='paid'; t.paidBy=how; t.proof=proof; t.number='PBP-'+(orderSeq++); t.sentBack=''; t.canceledNote=''; const placed=Date.now(); t.placedAt=new Date(placed); t.prodDue=null;
@@ -1993,6 +2013,17 @@ function renderAccount(){
       <p class="note">Managers and admins approve. They get an alert and see the order under Waiting for approval. Try it: switch to Jess Park from the name in the top right.</p></div>`;
   } else if(c.tab==='credits'){
     body=creditsTab();
+  } else if(c.tab==='billing'){
+    const C=ACCOUNT.card, T=ACCOUNT.tax||{};
+    body=`<div class="pb"><h3>Saved card</h3>${C?`<div class="cardrow"><b>${esc(C.brand)} ending ${esc(C.last4)}</b><span class="note">Expires ${esc(C.exp)} · saved ${esc(C.saved)}</span></div>
+        <p class="note">Checkout fills this in for you. Patriot staff can also charge it for orders you place with us, like a reorder by phone. Card numbers stay with Stripe. We never see them.</p>
+        <div class="acts"><button class="btn" type="button" data-m="card-new"${dis}>Replace card</button><button class="btn danger" type="button" data-m="card-rm"${dis}>Remove card</button></div>`
+      :`<p class="note">No card saved. Tick "Save this card" at checkout, or add one here. Adding a card opens a short Stripe page and doesn't charge anything.</p><div class="acts"><button class="btn pri" type="button" data-m="card-new"${dis}>Add a card</button></div>`}</div>
+      <div class="pb"><h3>Sales tax</h3>
+        <div class="lines"><div class="line"><span>Status</span><span>${T.exempt&&T.status==='approved'?'<span class="tag done">Exempt</span>':T.status==='review'?'<span class="tag appr">Certificate in review</span>':'<span class="tag">Taxable</span>'}</span></div>
+          ${T.cert?`<div class="line"><span>Certificate</span><span>${esc(T.cert)}</span></div><div class="line"><span>Type</span><span>${esc(T.kind||'Texas resale certificate')}</span></div><div class="line"><span>On file since</span><span>${esc(T.on||'')}</span></div>`:''}</div>
+        <p class="note">${ACCOUNT.type==='trade'?'Buying for resale? Upload a completed Texas resale certificate (Form 01-339). One blanket certificate covers every order. We review it within 1 business day, then your orders come through without tax.':'Tax-exempt organization? Upload your exemption certificate and we\'ll review it within 1 business day.'}</p>
+        <div class="acts"><button class="btn" type="button" data-m="cert-up"${dis}>${ICON.up}${T.cert?'Replace certificate':'Upload certificate'}</button><a class="btn link" href="https://comptroller.texas.gov/forms/01-339.pdf" target="_blank" rel="noopener">Get Form 01-339</a></div></div>`;
   } else {
     const A=ACCOUNT.alerts;
     body=`<div class="pb"><h3>Email alerts</h3>
@@ -2004,8 +2035,8 @@ function renderAccount(){
       <div><button class="btn" type="button" data-m="al-test">Send a test</button></div>
       ${c.hookOut?`<pre class="code">${esc(c.hookOut)}</pre>`:''}</div>`;
   }
-  modal.innerHTML=`<div class="ph"><div class="eyebrow"><span>Account</span><span>${esc(ACCOUNT.name)} · ${esc(ACCOUNT.terms)}</span></div><h2>${c.tab==='addresses'?'Address book':c.tab==='team'?'Team and approvals':c.tab==='credits'?'AI credits':'Alerts'}</h2></div>
-    <div class="tabs" role="tablist">${[['addresses','Address book'],['team','Team and approvals'],['alerts','Alerts'],['credits','AI credits']].map(([k,l])=>`<button type="button" role="tab" data-acct="${k}" aria-selected="${c.tab===k}">${l}</button>`).join('')}</div>
+  modal.innerHTML=`<div class="ph"><div class="eyebrow"><span>Account</span><span>${esc(ACCOUNT.name)} · ${esc(ACCOUNT.terms)}</span></div><h2>${c.tab==='addresses'?'Address book':c.tab==='team'?'Team and approvals':c.tab==='credits'?'AI credits':c.tab==='billing'?'Billing and tax':'Alerts'}</h2></div>
+    <div class="tabs" role="tablist">${[['addresses','Address book'],['team','Team and approvals'],['alerts','Alerts'],['billing','Billing and tax'],['credits','AI credits']].map(([k,l])=>`<button type="button" role="tab" data-acct="${k}" aria-selected="${c.tab===k}">${l}</button>`).join('')}</div>
     ${body}<div class="mf"><span class="grow note">Changes save as you type.</span><button class="btn pri" type="button" data-m="cancel">Done</button></div>`;
 }
 
@@ -2325,6 +2356,7 @@ pane.addEventListener('change',e=>{
   const t=cur(), el=e.target, id=el.id, s=selInfo(t);
   const g=s.g||null, ver=s.type==='version'?s.v:(g&&g.versions.length===1?g.versions[0]:null);
   if(id==='p-due'){ t.due=el.value; renderHead(); return; }
+  if(id==='p-taxo'){ t.taxExempt=el.value==='exempt'?true:el.value==='charge'?false:null; toast(el.value==='auto'?'Tax follows the account setting.':el.value==='exempt'?'This order won\'t be taxed.':'Tax will be charged on this order.'); return; }
   if(id==='p-blind'){ t.blind=el.checked; renderHead(); return; }
   if(el.name==='ship'){ t.ship=el.value; renderAll(); return; }
   if(el.dataset.book){ const a=ACCOUNT.addresses.find(x=>x.id===el.value), sh=t.shipTos.find(x=>x.id===el.dataset.book); if(a&&sh){ sh.label=a.label; sh.addr=a.addr; renderAll(); toast(`Filled from ${a.label}.`); } return; }
@@ -2414,7 +2446,11 @@ scrim.addEventListener('click',e=>{
   if(m==='dfiles'){ dFilesIn.click(); return; }
   if(m==='dallq'){ const n=parseInt($('#d-allq').value,10); if(!(n>0)) return; ctx.draft.versions.forEach(v=>{v.qty=n;}); ctx.draft.defQty=n; renderStep2('d-add'); return; }
   if(m==='change'){ closeModal(); checked.clear(); renderAll(); openDrawer('pane'); if(document.body.classList.contains('nopane')) togglePanel(); const miss=t.shipTos.find(s=>!s.addr.trim()); (miss?document.getElementById('p-sa-'+miss.id):$('#p-po'))?.focus(); return; }
-  if(m==='card'||m==='terms'||m==='link'||m==='pickup'){ const proof=ctx.proof; closeModal(); submitOrder(t,m,proof); return; }
+  if(m==='go-billing'){ openAccount('billing'); return; }
+  if(m==='card'||m==='newcard'||m==='terms'||m==='link'||m==='pickup'){ const proof=ctx.proof, save=m==='newcard'&&ctx.saveCard!==false;
+    const TX=taxFor(t,oTotal(t),shipEstimate(t)); t.tax=TX.amt; t.taxLabel=TX.label;
+    if(save){ ACCOUNT.card={brand:'Mastercard',last4:'5100',exp:'11/29',saved:fmtDay(new Date())}; }
+    closeModal(); submitOrder(t,m==='newcard'?'card':m,proof); if(save) setTimeout(()=>toast('Card saved for next time. Manage it under Billing.'),3200); return; }
   if(m==='ask'){ t.status='approval'; t.approval=true; t.requestedBy=ACCOUNT.me; t.proof=ctx.proof; closeModal(); checked.clear(); renderAll();
     toast(`Sent for approval. ${ACCOUNT.users.filter(u=>['admin','manager'].includes(u.role)).map(u=>u.name).join(' and ')} got an alert.`); return; }
   if(m==='fl-photos'){ $('#flagIn').click(); return; }
@@ -2439,6 +2475,9 @@ scrim.addEventListener('click',e=>{
     toast(`Changes sent for ${x.v.name}${note?`: "${trunc(note,50)}"`:''}. We'll send a new proof.`); return; }
   if(m==='pr-all'){ cur().proofApproved=new Date(); ctx.list.forEach(x=>{ x.v.approved=true; if(x.v.prod==='Proof ready') x.v.prod='Queued'; }); closeModal(); renderAll(); toast('Proof approved. Your order is queued for production.'); return; }
   if(m==='buy'){ const n=+b.dataset.n; ACCOUNT.credits+=n; ACCOUNT.ledger.unshift({when:new Date(),who:me().name,action:`Bought ${n} credits`,file:'',n,kind:'buy'}); renderAccount(); renderWho(); toast(`Added ${n} AI credits. Demo only, no charge.`); return; }
+  if(m==='card-new'){ ACCOUNT.card={brand:'Visa',last4:String(1000+Math.floor(Math.random()*8999)),exp:'09/30',saved:fmtDay(new Date())}; renderAccount(); toast('Demo: Stripe opened a page to add the card. Saved, nothing charged.'); return; }
+  if(m==='card-rm'){ ACCOUNT.card=null; renderAccount(); toast('Card removed. Checkout will ask for a card next time.'); return; }
+  if(m==='cert-up'){ ACCOUNT.tax={exempt:false,cert:'resale-certificate-01-339.pdf',kind:'Texas resale certificate, blanket',on:fmtDay(new Date()),status:'review'}; renderAccount(); toast('Certificate uploaded. Patriot reviews it within 1 business day.'); return; }
   if(m==='ab-add'){ ACCOUNT.addresses.push({id:uid('a'),label:'New address',addr:''}); renderAccount(); const els=modal.querySelectorAll('[data-abl]'); els[els.length-1]?.select(); return; }
   if(m==='ab-rm'){ ACCOUNT.addresses=ACCOUNT.addresses.filter(a=>a.id!==b.dataset.id); renderAccount(); return; }
   if(m==='u-add'){ ACCOUNT.users.push({id:uid('u'),name:'New teammate',email:'',role:'buyer'}); renderAccount(); const els=modal.querySelectorAll('[data-un]'); els[els.length-1]?.select(); return; }
@@ -2481,6 +2520,7 @@ modal.addEventListener('change',e=>{
   if(ctx?.type==='review'){ const t=cur();
     if(el.name==='rvship'){ t.ship=el.value; renderAll(); renderReview(); return; }
     if(el.name==='rvpay'){ ctx.pay=el.value; renderReview(); return; }
+    if(el.id==='rv-save'){ ctx.saveCard=el.checked; return; }
     if(el.id==='rv-blind'){ t.blind=el.checked; renderHead(); return; }
     if(el.dataset.rvbook){ const a=ACCOUNT.addresses.find(x=>x.id===el.value), sh=t.shipTos.find(x=>x.id===el.dataset.rvbook); if(a&&sh){ sh.addr=a.addr; if(/^Ship-to \d+$|^Main$/.test(sh.label)) sh.label=a.label; renderAll(); renderReview(); } return; }
   }
@@ -3050,7 +3090,7 @@ function useAcct(id){
 }
 function renderNav(){
   const items=MODE==='staff'?[['dash','Dashboard'],['orders','Orders'],['prod','Job board'],['desk','Order desk'],['cust','Customers'],['pricing','Pricing'],['credits','AI credits'],['settings','Settings']]
-    :[['orders','Orders'],['products','Products'],['addresses','Address book'],['team','Team'],['alerts','Alerts']];
+    :[['orders','Orders'],['products','Products'],['addresses','Address book'],['team','Team'],['alerts','Alerts'],['billing','Billing']];
   document.querySelector('.nav').innerHTML=items.map(([k,l])=>`<button type="button" data-nav="${k}">${l}</button>`).join('');
   const lt=document.querySelector('.logo .lt small'); if(lt) lt.textContent=MODE==='staff'?'Back office':'Trade portal';
   $('#modeBtn').innerHTML=MODE==='staff'?'<span class="ml">Customer view</span>':'<span class="ml">Back office</span>';
@@ -3224,7 +3264,8 @@ function boClick(e){
   if(a==='print'&&o){ setStage(o,'Printing'); say(`${o.number} is printing.`); return; }
   if(a==='ready'&&o){ setStage(o,'Ready'); say(`${o.number} is ${o.ship==='pickup'?'ready for pickup. Pickup email sent.':'ready to ship.'}`); return; }
   if(a==='done'&&o){ setStage(o,'Done'); say(`${o.number} ${o.ship==='pickup'?'picked up':'shipped. Tracking emailed'}.`); return; }
-  if(a==='approveacct'){ const A=acctById(b.dataset.a); A.status='approved'; A.credits+=25; A.ledger.unshift({when:new Date(),who:STAFF.name,action:'Welcome credits',file:'',n:25,kind:'grant'}); say(`${A.name} approved. Welcome email sent with 25 free AI credits.`); return; }
+  if(a==='certok'){ const A=acctById(b.dataset.a); A.tax.exempt=true; A.tax.status='approved'; say(`${A.name} is now tax-exempt. Their orders come through without tax.`); return; }
+  if(a==='approveacct'){ const A=acctById(b.dataset.a); A.status='approved'; if(A.tax&&A.tax.cert){ A.tax.exempt=true; A.tax.status='approved'; } A.credits+=25; A.ledger.unshift({when:new Date(),who:STAFF.name,action:'Welcome credits',file:'',n:25,kind:'grant'}); say(`${A.name} approved. Welcome email sent with 25 free AI credits.`); return; }
   if(a==='declineacct'){ const A=acctById(b.dataset.a); A.status='declined'; say(`${A.name} declined for trade. We emailed them about a retail account on patriotpf.com.`); return; }
   if(a==='grant'){ const A=acctById(b.dataset.a); A.credits+=50; A.ledger.unshift({when:new Date(),who:STAFF.name,action:'Credits added by staff',file:'',n:50,kind:'grant'}); renderWho(); say(`Added 50 AI credits to ${A.name}.`); return; }
   if(a==='addcust'){ toast('Demo: adding customers opens a form in the live back office.'); return; }
@@ -3412,8 +3453,10 @@ function genVolume(){
     const a={id:'g'+i,name,type:trade?'trade':'retail',status:st,contact:`${fn} ${ln}`,email:`${fn.toLowerCase()}@${dom}`,since:MO[sinceD.getMonth()]+' '+sinceD.getFullYear(),joined:st==='pending'?new Date(now-ri(1,40)*36e5):sinceD,
       credits:R()<.3?ri(1,180):0,ledger:[],pastSpend:0,terms:'Card on file',me:'x1',rules:{buyersAlways:false,over:0},addresses:[],
       alerts:{to:`orders@${dom}`,email:{proof:true,problem:true,shipped:true,approval:true},hook:'',hookEvents:{}},users:[{id:'x1',name:`${fn} ${ln}`,email:`${fn.toLowerCase()}@${dom}`,role:'admin'}],
-      w:st==='approved'?Math.pow(R(),2.2)*10+.2:0};
-    if(st==='pending') a.app={submitted:fmtDT(a.joined),website:dom,resale:R()<.8?'Texas resale certificate uploaded':'Not uploaded yet',sells:pick(['Sign shop','Print broker','Promo products reseller','Marketing agency','Vehicle wraps'])};
+      w:st==='approved'?Math.pow(R(),2.2)*10+.2:0,
+      card:st==='approved'&&R()<.6?{brand:pick(['Visa','Mastercard','Amex']),last4:String(ri(1000,9999)),exp:`${String(ri(1,12)).padStart(2,'0')}/${ri(27,31)}`,saved:MO[sinceD.getMonth()]+' '+sinceD.getFullYear()}:null,
+      tax:trade?(st==='approved'&&R()<.85?{exempt:true,cert:'resale-certificate-01-339.pdf',kind:'Texas resale certificate, blanket',on:MO[sinceD.getMonth()]+' '+sinceD.getFullYear(),status:'approved'}:st==='pending'&&R()<.8?{exempt:false,cert:'resale-certificate-01-339.pdf',kind:'Texas resale certificate, blanket',on:'With application',status:'review'}:null):null};
+    if(st==='pending') a.app={submitted:fmtDT(a.joined),website:dom,resale:a.tax&&a.tax.cert?'Texas resale certificate uploaded':'Not uploaded yet',sells:pick(['Sign shop','Print broker','Promo products reseller','Marketing agency','Vehicle wraps'])};
     ACCTS.push(a); ORD[a.id]=[]; gen.push(a);
   }
   const buyers=gen.filter(a=>a.status==='approved'), totW=buyers.reduce((s,a)=>s+a.w,0);
@@ -3673,9 +3716,9 @@ function custPage(){
       ${sel('cq-type',[['','Trade and retail'],['trade','Trade'],['retail','Retail']],Q.type)}${sel('cq-status',[['','Any status'],['active','Active'],['declined','Declined']],Q.status)}
       ${sel('cq-sort',[['recent','Sort: last order'],['spend','Sort: lifetime spend'],['orders','Sort: most orders'],['open','Sort: open orders'],['name','Sort: name']],Q.sort)}<span class="grow"></span>${sel('cq-per',[['25','25 per page'],['50','50 per page'],['100','100 per page']],String(per))}</div>
     <div class="bulkbar"><span class="grow"></span>${pager(rows.length,Q.page,per,'c')}</div>
-    <div class="box" style="overflow:auto"><table class="grid cust"><thead><tr><th>Account</th><th>Type</th><th>Status</th><th>Contact</th><th class="r">Open</th><th class="r">Orders</th><th>Last order</th><th class="r">Lifetime spend</th><th class="r">AI credits</th><th></th></tr></thead><tbody>
+    <div class="box" style="overflow:auto"><table class="grid cust"><thead><tr><th>Account</th><th>Type</th><th>Status</th><th>Contact</th><th class="r">Open</th><th class="r">Orders</th><th>Last order</th><th class="r">Lifetime spend</th><th>Tax</th><th>Card</th><th></th></tr></thead><tbody>
     ${vis.map(a=>{ const s=st.get(a.id); return `<tr><td><button type="button" class="lnk" data-bo="cust1" data-a="${a.id}"><b>${esc(a.name)}</b></button><div class="note">since ${esc(a.since)}</div></td><td>${typeChip(a)}</td><td><span class="stb ${a.status==='approved'?'s-good':a.status==='pending'?'s-warn':'s-crit'}">${a.status==='approved'?'Active':a.status==='pending'?'Pending':'Declined'}</span></td>
-      <td>${esc(a.contact)}<div class="note">${esc(a.email)}</div></td><td class="r num">${s.open}</td><td class="r num">${pcs(s.count)}</td><td>${s.last?fmtDay(s.last):'None'}</td><td class="r num">${money(s.spend)}</td><td class="r num">${pcs(a.credits)}</td>
+      <td>${esc(a.contact)}<div class="note">${esc(a.email)}</div></td><td class="r num">${s.open}</td><td class="r num">${pcs(s.count)}</td><td>${s.last?fmtDay(s.last):'None'}</td><td class="r num">${money(s.spend)}</td><td>${a.tax&&a.tax.exempt?'<span class="stb s-good sm">Exempt</span>':a.tax&&a.tax.status==='review'&&a.status!=='pending'?`<span class="stb s-warn sm">Cert in review</span> <button class="btn link sm" type="button" data-bo="certok" data-a="${a.id}">Approve</button>`:'<span class="note">Taxable</span>'}</td><td class="note">${a.card?`${esc(a.card.brand)} ${esc(a.card.last4)}`:'None'}</td>
       <td><div class="acts" style="justify-content:flex-end">${a.status==='approved'?`<button class="btn sm" type="button" data-bo="desk" data-a="${a.id}">Order desk</button>`:''}<button class="btn sm" type="button" data-bo="custorders" data-a="${a.id}">Orders</button></div></td></tr>`; }).join('')}
     </tbody></table></div><div class="bulkbar"><span class="grow"></span>${pager(rows.length,Q.page,per,'c')}</div>`;
 }
