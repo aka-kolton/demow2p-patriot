@@ -3333,7 +3333,7 @@ function seedAccounts(){
 }
 
 /* ================= back office at volume (sample data, not real customers) ================= */
-const DEPTS=[['rigid','Rigid'],['roll','Roll / wide format'],['dtf','DTF'],['label','Labels'],['finish','Finishing'],['ship','Shipping']];
+const DEPTS=[['rigid','Rigid'],['roll','Roll'],['dtf','DTF'],['label','Labels'],['finish','Finishing'],['ship','Shipping']];
 const deptOf=(g,v)=>v.dept||routeOf(g)||'rigid';
 function bizAdd(d,n){ const x=new Date(d); x.setHours(17,0,0,0); while(n>0){ x.setDate(x.getDate()+1); const w=x.getDay(); if(w!==0&&w!==6) n--; } return x; }
 const numOf=o=>String(o.number||'Draft').replace('PBP-','');
