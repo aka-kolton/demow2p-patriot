@@ -692,6 +692,7 @@ body.staff #modeBtn{background:var(--red);border-color:var(--red);color:#fff}
 .qacts{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.qrow{display:flex;gap:4px;align-items:center}
 .qa{width:30px;height:30px;display:grid;place-items:center;border:1px solid var(--line);background:#fff;border-radius:6px;cursor:pointer;color:var(--accent);padding:0}
 .qa svg{width:15px;height:15px}.qa.good{color:var(--good)}.qa.good:hover{border-color:var(--good)}
+.dts{display:grid;grid-template-columns:auto auto;gap:1px 8px;font-size:12.5px;align-items:baseline}.dts span{color:var(--ink-3);font-size:11.5px;white-space:nowrap}.dts b{font-weight:600;white-space:nowrap}.dts small{color:var(--ink-3);font-weight:500}.warnt{color:#b45309!important}
 .istat{display:flex;flex-direction:column;gap:5px;align-items:flex-start}
 .otbl .dept select{width:auto!important;max-width:150px;flex:none}.otbl .qrow select.cell{width:auto!important;flex:none}.dept{width:auto!important;max-width:100%}.qa:hover{border-color:var(--accent);background:var(--accent-soft)}.qa.warn{color:var(--crit)}.qa.warn:hover{border-color:var(--crit)}
 .qrow .cell.sm{height:30px;width:auto;padding:0 6px}
@@ -2436,7 +2437,7 @@ scrim.addEventListener('click',e=>{
   if(m==='pr-cancelch'){ ctx.changes=false; renderProof(); return; }
   if(m==='pr-sendch'){ const note=($('#pr-note')?.value||'').trim(); const x=ctx.list[ctx.idx]; x.v.prod='Changes requested'; x.v.changeNote=note||'Changes requested'; x.v.approved=false; closeModal(); renderAll();
     toast(`Changes sent for ${x.v.name}${note?`: "${trunc(note,50)}"`:''}. We'll send a new proof.`); return; }
-  if(m==='pr-all'){ ctx.list.forEach(x=>{ x.v.approved=true; if(x.v.prod==='Proof ready') x.v.prod='Queued'; }); closeModal(); renderAll(); toast('Proof approved. Your order is queued for production.'); return; }
+  if(m==='pr-all'){ cur().proofApproved=new Date(); ctx.list.forEach(x=>{ x.v.approved=true; if(x.v.prod==='Proof ready') x.v.prod='Queued'; }); closeModal(); renderAll(); toast('Proof approved. Your order is queued for production.'); return; }
   if(m==='buy'){ const n=+b.dataset.n; ACCOUNT.credits+=n; ACCOUNT.ledger.unshift({when:new Date(),who:me().name,action:`Bought ${n} credits`,file:'',n,kind:'buy'}); renderAccount(); renderWho(); toast(`Added ${n} AI credits. Demo only, no charge.`); return; }
   if(m==='ab-add'){ ACCOUNT.addresses.push({id:uid('a'),label:'New address',addr:''}); renderAccount(); const els=modal.querySelectorAll('[data-abl]'); els[els.length-1]?.select(); return; }
   if(m==='ab-rm'){ ACCOUNT.addresses=ACCOUNT.addresses.filter(a=>a.id!==b.dataset.id); renderAccount(); return; }
@@ -3219,7 +3220,7 @@ function boClick(e){
   if(a==='flag'&&o){ openFlag(hit.a.id,o.id); return; }
   if(a==='resolve'&&o){ o.issue.resolved=true; say(`Issue on ${o.number} resolved. Job back in the queue.`); return; }
   if(a==='approve'&&o){ setStage(o,'Queued'); say(`${o.number} files OK. Queued for production.`); return; }
-  if(a==='queue'&&o){ o.groups.forEach(g=>g.versions.forEach(v=>{ v.approved=true; })); setStage(o,'Queued'); say(`${o.number} approved for the customer and sent to print.`); return; }
+  if(a==='queue'&&o){ o.proofApproved=new Date(); o.groups.forEach(g=>g.versions.forEach(v=>{ v.approved=true; })); setStage(o,'Queued'); say(`${o.number} approved for the customer and sent to print.`); return; }
   if(a==='print'&&o){ setStage(o,'Printing'); say(`${o.number} is printing.`); return; }
   if(a==='ready'&&o){ setStage(o,'Ready'); say(`${o.number} is ${o.ship==='pickup'?'ready for pickup. Pickup email sent.':'ready to ship.'}`); return; }
   if(a==='done'&&o){ setStage(o,'Done'); say(`${o.number} ${o.ship==='pickup'?'picked up':'shipped. Tracking emailed'}.`); return; }
@@ -3339,6 +3340,20 @@ function bizAdd(d,n){ const x=new Date(d); x.setHours(17,0,0,0); while(n>0){ x.s
 const numOf=o=>String(o.number||'Draft').replace('PBP-','');
 const placedOf=o=>o.placedAt?new Date(o.placedAt):null;
 function dueOf(o){ if(o.prodDue) return new Date(o.prodDue); const p=placedOf(o)||new Date(); return bizAdd(p,Math.max(1,...o.groups.map(g=>gDays(g)))+(o.proof?1:0)); }
+function nextBizMorning(d){ const x=new Date(d); x.setDate(x.getDate()+1); x.setHours(8,0,0,0); while(x.getDay()===0||x.getDay()===6) x.setDate(x.getDate()+1); return x; }
+function bizBack(d,n){ const x=new Date(d); x.setHours(8,0,0,0); while(n>0){ x.setDate(x.getDate()-1); if(x.getDay()!==0&&x.getDay()!==6) n--; } return x; }
+const TRANSIT=2; /* UPS Ground estimate, business days */
+function datesOf(o){
+  const placed=placedOf(o)||new Date(), prodDue=dueOf(o);
+  // ready to print: files passed (no proof) or proof approved / expected approval
+  let ready=o.proof?(o.proofApproved?new Date(o.proofApproved):bizAdd(placed,1)):new Date(placed);
+  const w=ready.getDay(); if(w===0||w===6||ready.getHours()>=CUTOFF) ready=nextBizMorning(ready); else if(ready.getHours()<8) ready.setHours(8,0,0,0);
+  const work=Math.max(...o.groups.map(g=>routeOf(g)==='label'||g.versions.length>4||gQty(g)>=100?2:1));
+  let start=bizBack(prodDue,work); if(start<ready) start=ready;
+  const inHands=o.ship==='pickup'?prodDue:bizAdd(prodDue,TRANSIT);
+  const need=o.due?new Date(o.due+'T17:00'):null;
+  return {placed,ready,start,prodDue,inHands,need,miss:need&&inHands>need};
+}
 const totalOf=(o,a)=>o.fixedTotal!=null?o.fixedTotal:acctTotal(o,a);
 const MO3=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const fmtDay=d=>{ if(!d) return ''; const x=new Date(d); return `${MO3[x.getMonth()]} ${x.getDate()}, ${x.getFullYear()}`; };
@@ -3429,7 +3444,8 @@ function genVolume(){
       g.versions[0].line=line++; o.groups.push(g);
     }
     o.name=o.groups.length===1?o.groups[0].name:`${o.groups[0].name} + ${o.groups.length-1} more`;
-    o.fixedTotal=Math.round(oTotal(o)*100)/100;
+    o.fixedTotal=Math.round(oTotal(o)*100)/100; if(o.proof) o.proofApproved=new Date(+t+ri(2,22)*36e5);
+    if(R()<.12) o.due=bizAdd(t,ri(2,8)).toISOString().slice(0,10);
     o.prodDue=dueOf(o);
     // where is it now?
     const bdAge=age*(5/7);
@@ -3448,7 +3464,7 @@ function genVolume(){
         v.prod=s2==='Ready'?(ship==='pickup'?'Ready for pickup':'Ready to ship'):s2;
         if(s2==='File needs fix') v.fileIssue=pick(['Low resolution: 72 ppi at print size.','Missing fonts. Two fonts in the PDF are not embedded.','No bleed on a full-bleed design.','Linked image missing from the PDF.']);
       }));
-      if(st==='Proof ready'||st==='Changes requested'){ o.proofSent=new Date(+t+ri(20,90)*6e4); o.reminders=hrs>24?[new Date(+o.proofSent+REMIND_H*36e5)]:[]; if(st==='Changes requested') o.groups[0].versions[0].changeNote=pick(['Can the logo be bigger?','Please fix the phone number, it should end in 2210.','Make the red a little darker.','Swap the photo for the one I just emailed.']); }
+      if(st==='Proof ready'||st==='Changes requested'){ o.proofApproved=null; o.proofSent=new Date(+t+ri(20,90)*6e4); o.reminders=hrs>24?[new Date(+o.proofSent+REMIND_H*36e5)]:[]; if(st==='Changes requested') o.groups[0].versions[0].changeNote=pick(['Can the logo be bigger?','Please fix the phone number, it should end in 2210.','Make the red a little darker.','Swap the photo for the one I just emailed.']); }
       if(!o.proof&&st==='Queued'&&hrs<.5) o.cancelUntil=+t+CANCEL_MIN*6e4;
       if(R()<.015&&['Queued','Printing'].includes(st)){ o.issue={type:pick(['Print defect','Color mismatch','Material issue']),note:pick(['Banding on one panel. Reprinting, still on time.','Color is off from the last order. Checking the profile.','Short on 4mm coro. Swapping to a new box.']),photos:[],notify:{customer:false,admin:true},held:R()<.4,by:'Press operator',when:new Date(),resolved:false,reply:''}; }
     }
@@ -3499,7 +3515,7 @@ function orderMatches(o,a,Q){
 }
 function filteredOrders(Q){
   const rows=allOrders().filter(({o,a})=>orderMatches(o,a,Q));
-  const S={due:(x,y)=>dueOf(x.o)-dueOf(y.o),new:(x,y)=>(placedOf(y.o)||0)-(placedOf(x.o)||0),old:(x,y)=>(placedOf(x.o)||0)-(placedOf(y.o)||0),amt:(x,y)=>totalOf(y.o,y.a)-totalOf(x.o,x.a),num:(x,y)=>String(y.o.number||'').localeCompare(String(x.o.number||''))};
+  const S={start:(x,y)=>datesOf(x.o).start-datesOf(y.o).start,hands:(x,y)=>datesOf(x.o).inHands-datesOf(y.o).inHands,due:(x,y)=>dueOf(x.o)-dueOf(y.o),new:(x,y)=>(placedOf(y.o)||0)-(placedOf(x.o)||0),old:(x,y)=>(placedOf(x.o)||0)-(placedOf(y.o)||0),amt:(x,y)=>totalOf(y.o,y.a)-totalOf(x.o,x.a),num:(x,y)=>String(y.o.number||'').localeCompare(String(x.o.number||''))};
   return rows.sort(S[Q.sort]||S.due);
 }
 const matName=g=>{ const m=matById(g.material); return m?m.name:'Choose a material'; };
@@ -3519,8 +3535,12 @@ function ordersPage(){
       <tr class="oh"><td class="c-ck"><button type="button" class="tog" data-ot="${o.id}" aria-label="${col?'Show':'Hide'} items">${col?'+':'−'}</button><input type="checkbox" data-osel="${o.id}"${BOSEL.has(o.id)?' checked':''} aria-label="Select ${esc(o.number||'draft')}"></td>
         <td class="c-id"><button type="button" class="lnk num" data-bo="open" data-a="${a.id}" data-o="${o.id}">${esc((o.number||'Draft').replace('PBP-',''))}</button>${typeChip(a)}</td>
         <td><button type="button" class="lnk" data-bo="cust1" data-a="${a.id}">${esc(a.contact)}</button> <span class="note">(${esc(a.name)})</span><div>${esc(a.email)} <span class="cnt" title="Orders from this customer">${(ORD[a.id]||[]).length}</span></div>${o.po?`<div class="note">PO ${esc(o.po)}</div>`:''}</td>
-        <td>${p?fmtDT(p):'Not placed'}<div><b class="num">${money(totalOf(o,a))}</b> ${isUnpaid(o)?'<span class="stb s-crit sm">Unpaid</span>':''}</div></td>
-        <td>${o.status==='draft'?'':`Order: ${fmtDay(due)}<div class="${late?'late':''}">Production: ${fmtDay(due)}${late?' · late':''}</div>`}</td>
+        <td>${p?`<span class="note">Ordered</span> ${fmtDT(p)}`:'Not placed'}<div><b class="num">${money(totalOf(o,a))}</b> ${isUnpaid(o)?'<span class="stb s-crit sm">Unpaid</span>':''}</div></td>
+        <td>${o.status==='draft'?'':(()=>{ const D=datesOf(o), now=new Date(), startLate=o.status==='paid'&&['Queued','File needs fix','Proof ready','Changes requested','Checking files'].includes(orderStage(o))&&D.start<now;
+          return `<div class="dts"><span>Order due</span><b class="${D.miss?'late':''}">${fmtDay(D.need||D.inHands)}${D.miss?' · misses needed-by':''}</b>
+            <span>Prod. start</span><b class="${startLate?'warnt':''}">${fmtDay(D.start)}${startLate?' · start now':''}</b>
+            <span>Prod. due</span><b class="${late?'late':''}">${fmtDay(D.prodDue)}${late?' · late':''}</b>
+            <span>In hands</span><b>${fmtDay(D.inHands)} <small>${o.ship==='pickup'?'pickup':'est.'}</small></b></div>`; })()}</td>
         <td><span class="stb ${cls}">${esc(st)}</span>${iss?`<div class="note crit">${esc(o.issue.type)}</div>`:''}${o.cancelUntil&&Date.now()<o.cancelUntil?`<div class="note">${clock('cancel',o.cancelUntil)}</div>`:''}</td>
         <td class="c-act">${quickActs(o,a)}</td></tr>
       ${col?'':items.map(({g,v})=>`<tr class="it"><td></td><td class="num note">${v.line||''}</td>
@@ -3541,11 +3561,11 @@ function ordersPage(){
       ${S('oq-prod',[['','Any product'],...MAT.map(m=>[m.id,m.name])],Q.prod)}
       ${S('oq-type',[['','Trade and retail'],['trade','Trade only'],['retail','Retail only']],Q.type)}
       <label class="check"><input type="checkbox" id="oq-flag"${Q.flag?' checked':''}> Flagged</label><label class="check"><input type="checkbox" id="oq-rush"${Q.rush?' checked':''}> Rush</label>
-      <span class="grow"></span>${S('oq-sort',[['due','Sort: production due'],['new','Sort: newest'],['old','Sort: oldest'],['amt','Sort: amount'],['num','Sort: order #']],Q.sort)}<button class="btn link" type="button" data-bo="oreset">Reset</button>
+      <span class="grow"></span>${S('oq-sort',[['due','Sort: production due'],['start','Sort: production start'],['hands','Sort: in hands'],['new','Sort: newest'],['old','Sort: oldest'],['amt','Sort: amount'],['num','Sort: order #']],Q.sort)}<button class="btn link" type="button" data-bo="oreset">Reset</button>
     </div>
     <div class="bulkbar"><select id="o-bulk" class="cell"><option value="">Bulk action${BOSEL.size?` (${BOSEL.size} selected)`:''}</option><option value="print">Start printing</option><option value="ready">Done printing</option><option value="done">Mark shipped / picked up</option><option value="remind">Send proof reminders</option><option value="ticket">Print job tickets</option><option value="export">Export selected</option>${DEPTS.map(([k,l])=>`<option value="dept:${k}">Assign to ${l}</option>`).join('')}</select><button class="btn pri" type="button" data-bo="bulk"${BOSEL.size?'':' disabled'}>Submit</button>${BOSEL.size?`<button class="btn link" type="button" data-bo="selnone">Clear selection</button>`:''}
       <span class="grow"></span><button class="btn link" type="button" data-bo="colall">${vis.every(x=>BOCOL.has(x.o.id))?'Show all items':'Hide all items'}</button>${S('oq-per',[['25','25 per page'],['50','50 per page'],['100','100 per page']],String(per))}${pager(rows.length,Q.page,per,'o')}</div>
-    <div class="box otw"><table class="otbl"><thead><tr><th class="c-ck"><input type="checkbox" id="o-all"${allSel?' checked':''} aria-label="Select this page"></th><th>ID</th><th>Order details</th><th>Order date &amp; amount</th><th>Order due date</th><th>Status</th><th>Action</th></tr></thead>
+    <div class="box otw"><table class="otbl"><thead><tr><th class="c-ck"><input type="checkbox" id="o-all"${allSel?' checked':''} aria-label="Select this page"></th><th>ID</th><th>Order details</th><th>Order date &amp; amount</th><th>Dates</th><th>Status</th><th>Action</th></tr></thead>
       ${body||'<tbody><tr><td colspan="7"><p class="note" style="padding:20px">No orders match these filters.</p></td></tr></tbody>'}</table></div>
     <div class="bulkbar"><span class="grow"></span>${pager(rows.length,Q.page,per,'o')}</div>`;
 }
