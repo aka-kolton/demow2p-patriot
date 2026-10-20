@@ -1081,8 +1081,7 @@ function renderSide(keepFocus){
     <div class="side-sec"><div class="side-h">In production</div>${prod.map(t=>orderRow(t,ICON.order)).join('')||'<p class="note">Nothing in production.</p>'}</div>
     <div class="side-sec"><div class="side-h">Past orders</div>
       <input class="search" id="pastQ" type="search" placeholder="Search name, PO, client, file" value="${esc(pastQ)}" aria-label="Search past orders">
-      ${past.map(t=>orderRow(t,ICON.done)).join('')||'<p class="note">No matches.</p>'}</div>
-    <div class="side-sec"><div class="side-h">Templates</div>${TT.map((p,i)=>`<button class="tree" type="button" data-tt="${i}"><span class="ico">${ICON.tpl}</span><span class="nm">${esc(p.name)}</span><span class="cnt">${p.includeArt?'with art':'specs only'}</span></button>`).join('')||'<p class="note">Save any order as a template to reuse it.</p>'}</div>`;
+      ${past.map(t=>orderRow(t,ICON.done)).join('')||'<p class="note">No matches.</p>'}</div>`;
   if(keepFocus){const s=$('#pastQ'); s.focus(); s.setSelectionRange(s.value.length,s.value.length);}
 }
 function stepsHTML(t){
@@ -1123,7 +1122,6 @@ function renderHead(){
       ${t.status!=='draft'?`${proofReady?'<button class="btn pri" type="button" data-tool="proof">Review proof</button>':''}<button class="btn${proofReady?'':' pri'}" type="button" data-tool="reorder">Reorder</button><button class="btn" type="button" data-tool="save-tpl">Save as template</button>${t.status!=='approval'?'<button class="btn" type="button" data-tool="proofview">View proofs</button>':''}`
         :lock?'':`<button class="btn pri" type="button" data-tool="additem">${ICON.plus}Add item<kbd>A</kbd></button>
           <button class="btn" type="button" data-tool="upload">${ICON.up}Upload files<kbd>U</kbd></button>
-          <button class="btn" type="button" data-tool="import">${ICON.sheet}Import sheet<kbd>I</kbd></button>
           <button class="btn" type="button" data-tool="shipmenu" id="shipBtn">${ICON.pin}Shipping<kbd>S</kbd></button>`}
       <span class="sp"></span>
       ${multi?`<button class="btn link" type="button" data-tool="expandall">${allOpen?'Collapse all':'Expand all versions'}</button>`:''}
@@ -1138,9 +1136,8 @@ function renderList(){
     list.innerHTML=lock?'<p class="emptynote" style="padding:24px">No items.</p>':`<div class="bigacts">
       <button class="bigact pri" type="button" data-tool="additem">${ICON.plus}<b>Add item <kbd>A</kbd></b><small>Pick a product, set it up, add one file or a hundred.</small></button>
       <button class="bigact" type="button" data-tool="upload">${ICON.up}<b>Upload files <kbd>U</kbd></b><small>Drop a stack of files, then set them up in bulk.</small></button>
-      <button class="bigact" type="button" data-tool="import">${ICON.sheet}<b>Import sheet <kbd>I</kbd></b><small>Paste rows from a spreadsheet and drop the images. We match them by file name.</small></button>
-      <button class="bigact" type="button" data-tool="tplmenu">${ICON.tpl}<b>Use a template</b><small>Start from a saved kit or a past order.</small></button></div>
-      <p class="emptynote">You can also drop files anywhere on this list, or paste spreadsheet rows with ${MOD}+V.</p>`;
+</div>
+      <p class="emptynote">You can also drop files anywhere on this list. Have a spreadsheet? <button class="btn link" type="button" data-tool="import">Import it</button>${TT.length?` · <button class="btn link" type="button" data-tool="tplmenu">Start from a template</button>`:''}</p>`;
     return;
   }
   const allCk=t.groups.every(g=>checked.has(keyG(g)));
@@ -1290,8 +1287,8 @@ function orderPane(t){
       ${lock?'':`<button class="btn" type="button" data-act="addship">${ICON.plus}Add ship-to</button>`}`;
   }
   h+='</div><div class="pb"><div class="acts">';
-  if(t.status!=='draft') h+='<button class="btn pri" type="button" data-act="reorder">Reorder</button><button class="btn" type="button" data-act="save-tpl">Save as template</button>';
-  else if(!lock) h+=`<button class="btn" type="button" data-act="save-tpl">Save as template</button><button class="btn" type="button" data-act="dup-order">Duplicate</button><button class="btn danger" type="button" data-act="del-order">Delete draft</button>`;
+  if(t.status!=='draft') h+='<button class="btn pri" type="button" data-act="reorder">Reorder</button><button class="btn link" type="button" data-act="save-tpl">Save as template</button>';
+  else if(!lock) h+=`<button class="btn" type="button" data-act="dup-order">Duplicate</button><button class="btn link" type="button" data-act="save-tpl">Save as template</button><button class="btn danger" type="button" data-act="del-order">Delete draft</button>`;
   h+='</div>';
   if(confirmDel) h+=`<div class="confirm">Delete this draft and its items? <span style="flex:1"></span><button class="btn sm" type="button" data-act="del-cancel">Keep it</button><button class="btn sm danger pri" type="button" data-act="del-yes">Delete</button></div>`;
   return h+'</div>';
@@ -1314,9 +1311,9 @@ function groupPane(t,g){
     <div class="f"><label for="p-gmat">Material</label><select id="p-gmat"${dis}>${matOptions(g.material,'Choose a material')}</select></div>
     <div class="row2"><div class="f"><label for="p-gw">Width (in)${n>1?', all':''}</label><input type="number" id="p-gw" min="1" step="0.25" value="${ws.size===1?[...ws][0]:''}" placeholder="Mixed"${dtf||lock?' disabled':''}></div>
       <div class="f"><label for="p-gh">${dtf?'Length':'Height'} (in)${n>1?', all':''}</label><input type="number" id="p-gh" min="1" step="0.25" value="${hs.size===1?[...hs][0]:''}" placeholder="Mixed"${dis}></div></div>
-    <div class="row2"><div class="f"><span class="flabel">Sides</span><div class="seg" style="display:flex">
+    <div class="row2">${m&&m.route==='label'?`<div class="f"><label for="p-lper">Labels per roll</label><input type="number" id="p-lper" min="50" step="50" value="${lblOpt(g).perRoll||''}" placeholder="Auto, up to ${pcs(lblLayout(g,(g.versions[0]||{w:3}).w,(g.versions[0]||{h:2}).h,1000).maxPer)}"${dis}></div>`:`<div class="f"><span class="flabel">Sides</span><div class="seg" style="display:flex">
         <button type="button" style="flex:1" data-gsides="1" aria-pressed="${g.sides===1}"${!(m&&m.sides)||lock?' disabled':''}>1-sided</button>
-        <button type="button" style="flex:1" data-gsides="2" aria-pressed="${g.sides===2}"${!(m&&m.sides)||lock?' disabled':''}>2-sided</button></div></div>
+        <button type="button" style="flex:1" data-gsides="2" aria-pressed="${g.sides===2}"${!(m&&m.sides)||lock?' disabled':''}>2-sided</button></div></div>`}
       ${one?`<div class="f"><label for="p-vqty">Quantity</label><input type="number" id="p-vqty" min="1" step="1" value="${one.qty}"${dis}></div>`:'<div></div>'}</div>
     ${two?`<div class="f"><span class="flabel">Back side</span><div class="radios">
       <label class="radio"><input type="radio" name="gback" value="same"${g.back==='same'?' checked':''}${dis}><span>Same art both sides</span></label>
@@ -1328,7 +1325,7 @@ function groupPane(t,g){
   if(one) h+=`<div class="pb"><h3>Artwork</h3>${artBlock(t,g,one,dis)}</div>`;
   h+=`<div class="pb"><div id="p-tiers">${tierChart(g)}</div><div class="lines" id="p-sum">${gSum(g)}</div></div>`;
   if(!lock) h+=`<div class="pb"><h3>Versions</h3>
-      <div class="acts"><button class="btn" type="button" data-act="addvers">${ICON.up}${n>1?'Add versions':'Add files as versions'}</button><button class="btn" type="button" data-act="import-into">${ICON.sheet}Import sheet</button></div>
+      <div class="acts"><button class="btn" type="button" data-act="addvers">${ICON.up}${n>1?'Add versions':'Add files as versions'}</button><button class="btn link" type="button" data-act="import-into">Import from a spreadsheet</button></div>
       ${n>1?`<div class="f"><label for="p-allq">Set every version's quantity</label><div class="inl"><input type="number" id="p-allq" min="1" step="1" placeholder="Qty" class="cell" style="font-family:var(--mono)"><button class="btn" type="button" data-act="applyq">Apply</button></div></div>`:''}</div>`;
   h+=`<div class="pb">${notesField('p-gnotes',g.notes,dis,'above')}${MODE==='staff'?`<div class="f staffb"><label for="p-gprod">Production notes for this item (staff only)</label><textarea id="p-gprod" rows="2">${esc(g.prodNotes||'')}</textarea></div>`:''}
     <div class="acts"><button class="btn" type="button" data-act="proofview">Preview proof</button>${lock?'':`<button class="btn" type="button" data-act="dupg">Duplicate</button><button class="btn" type="button" data-act="saveitem">Save for reuse</button><button class="btn danger" type="button" data-act="rmg">Remove</button>`}</div></div>`;
@@ -1339,8 +1336,7 @@ function lblFields(g,dis){
   return `<div class="f"><span class="flabel">Roll setup</span><div class="row2">
     <div class="f"><label for="p-lwind">Wind direction</label><select id="p-lwind"${dis}>${WINDS.map(([n,l])=>`<option value="${n}"${o.wind===n?' selected':''}>Wind ${n}: ${l}</option>`).join('')}</select></div>
     <div class="f"><label for="p-lcore">Core</label><select id="p-lcore"${dis}><option value="3"${o.core===3?' selected':''}>3 in core</option><option value="6"${o.core===6?' selected':''}>6 in core</option></select></div></div>
-    <div class="row2"><div class="f"><label for="p-lper">Labels per roll</label><input type="number" id="p-lper" min="50" step="50" value="${o.perRoll||''}" placeholder="Auto, ${pcs(L.per)}"${dis}></div>
-    <div class="f"><label for="p-lod">Max roll size (OD, in)</label><input type="number" id="p-lod" min="4" max="12" step="0.5" value="${o.od}"${dis}></div></div>
+    <div class="row2"><div class="f"><label for="p-lod">Max roll size (OD, in)</label><input type="number" id="p-lod" min="4" max="12" step="0.5" value="${o.od}"${dis}></div><div></div></div>
     <p class="note">${L.across} across × ${L.around} around on a 13 in web · ${pcs(Math.round(L.lf))} linear ft · ${pcs(L.rolls)} roll${L.rolls===1?'':'s'} of up to ${pcs(L.per)} labels.${g.versions.length>1?` ${g.versions.length} designs, $25 copy change each after the first.`:''}</p></div>`;
 }
 function versionPane(t,g,v){
@@ -1653,9 +1649,9 @@ function renderStep2(focusId){
     <div class="f"><label for="d-mat">Material</label><select id="d-mat">${matOptions(d.material,'Choose a material')}</select></div>
     <div class="row2"><div class="f"><label for="d-w">Width (in)</label><input type="number" id="d-w" min="1" step="0.25" value="${d.w}"${dtf?' disabled':''}></div>
       <div class="f"><label for="d-h">${dtf?'Length':'Height'} (in)</label><input type="number" id="d-h" min="1" step="0.25" value="${d.h}"></div></div>
-    <div class="row2"><div class="f"><span class="flabel">Sides</span><div class="seg" style="display:flex">
+    <div class="row2">${m&&m.route==='label'?`<div class="f"><label for="d-per">Labels per roll</label><input type="number" id="d-per" min="50" step="50" value="${lblOpt(d).perRoll||''}" placeholder="Auto, up to ${pcs(lblLayout(d,d.w,d.h,1000).maxPer)}"><span class="hint">Leave blank and we wind as many as fit an 8 in roll.</span></div>`:`<div class="f"><span class="flabel">Sides</span><div class="seg" style="display:flex">
         <button type="button" style="flex:1" data-dsides="1" aria-pressed="${d.sides===1}"${m&&m.sides?'':' disabled'}>1-sided</button>
-        <button type="button" style="flex:1" data-dsides="2" aria-pressed="${d.sides===2}"${m&&m.sides?'':' disabled'}>2-sided</button></div></div>
+        <button type="button" style="flex:1" data-dsides="2" aria-pressed="${d.sides===2}"${m&&m.sides?'':' disabled'}>2-sided</button></div></div>`}
       <div class="f"><label for="d-turn">Turnaround</label><select id="d-turn">${TURN.map(x=>`<option value="${x.id}"${d.turn===x.id?' selected':''}>${x.label}${x.pct?` (+${Math.round(x.pct*100)}%)`:''}</option>`).join('')}</select></div></div>
     ${m&&m.sides&&d.sides===2?`<div class="f"><span class="flabel">Back side</span><div class="radios">
       <label class="radio"><input type="radio" name="dback" value="same"${d.back==='same'?' checked':''}><span>Same art both sides</span></label>
@@ -1689,7 +1685,7 @@ function addDraft(again){
   if(isLocked(t)) return;
   const d=ctx.draft, base=(d.name||'').trim()||ctx.label;
   const g=mkGroup({name:base===ctx.label?nextName(t,base):base,material:d.material,sides:d.sides,back:d.back,fin:d.fin,turn:d.turn,shipTo:d.shipTo});
-  d.versions.forEach(v=>addVersion(g,{...v}));
+  d.versions.forEach(v=>addVersion(g,{...v})); if(d.lbl) g.lbl={...d.lbl};
   t.groups.push(g); if(g.versions.length>1) expanded.add(g.id);
   selectOnly(keyG(g)); renderAll();
   const msg=`${g.name} added${g.versions.length>1?` with ${g.versions.length} versions`:''}.`;
@@ -2104,7 +2100,6 @@ const TOUR=[
   {sel:'[data-nav="products"]',title:'Rather shop the usual way?',text:'Products is a regular catalog with a page for each product. Pick the options top to bottom, upload art, and add it to an order.'},
   {sel:'[data-tool="additem"]',title:'Add item',text:'Press A, then a number. Pick a product, set it up, and drop one file or a hundred. Each file becomes a version.'},
   {sel:'[data-tool="upload"]',title:'Or drop files first',text:'Press U or drop files anywhere on the list. They land selected, and the dark bar sets product, size and quantity for all of them.'},
-  {sel:'[data-tool="import"]',title:'Import a spreadsheet',text:'Paste rows from your sheet and drop the images. We match them by file name and create the versions and ship-tos.'},
   {sel:'.list table',title:'Edit right in the table',text:'Change material, sides, size, quantity, finishing, turnaround and ship-to in the row. Shift-click picks a range. Click a status chip to fix a file.'},
   {sel:'#pane',title:'Details for what you pick',text:'Specs, artwork, the price break chart and your notes. Hide it with \\ when you want more room for the table.'},
   {sel:'#shipBtn',title:'Shipping',text:'Press S, then a number. 1 adds an address, 2 pulls from your address book, 3 is pickup in Arlington.'},
@@ -2481,6 +2476,7 @@ modal.addEventListener('change',e=>{
     if(el.id==='d-mat'){ d.material=el.value; const m=matById(d.material);
       if(m){ if(m.fixedW&&d.w!==m.fixedW){ d.h=Math.max(6,Math.round(d.h*m.fixedW/d.w)); d.w=m.fixedW; d.versions.forEach(x=>{x.w=d.w;x.h=d.h;}); } if(!m.sides){ d.sides=1; d.back='same'; } d.fin=d.fin.filter(f=>finById(f).on(m)); }
       renderStep2('d-mat'); return; }
+    if(el.id==='d-per'){ lblOpt(d).perRoll=parseInt(el.value,10)||0; const s=$('#d-sum'); if(s) s.innerHTML=gSum(d); return; }
     if(el.id==='d-turn'){ d.turn=el.value; const s=$('#d-sum'); if(s&&matById(d.material)) s.innerHTML=gSum(d); return; }
     if(el.name==='dback'){ d.back=el.value; renderStep2(); return; }
     if(el.id==='d-ship'){ d.shipTo=el.value||null; return; }
