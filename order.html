@@ -691,7 +691,9 @@ body.staff #modeBtn{background:var(--red);border-color:var(--red);color:#fff}
 .otbl .c-act{width:230px}
 .qacts{display:flex;flex-wrap:wrap;gap:6px;align-items:center}.qrow{display:flex;gap:4px;align-items:center}
 .qa{width:30px;height:30px;display:grid;place-items:center;border:1px solid var(--line);background:#fff;border-radius:6px;cursor:pointer;color:var(--accent);padding:0}
-.qa svg{width:15px;height:15px}.qa:hover{border-color:var(--accent);background:var(--accent-soft)}.qa.warn{color:var(--crit)}.qa.warn:hover{border-color:var(--crit)}
+.qa svg{width:15px;height:15px}.qa.good{color:var(--good)}.qa.good:hover{border-color:var(--good)}
+.istat{display:flex;flex-direction:column;gap:5px;align-items:flex-start}
+.otbl .dept select{width:auto!important;max-width:150px;flex:none}.otbl .qrow select.cell{width:auto!important;flex:none}.dept{width:auto!important;max-width:100%}.qa:hover{border-color:var(--accent);background:var(--accent-soft)}.qa.warn{color:var(--crit)}.qa.warn:hover{border-color:var(--crit)}
 .qrow .cell.sm{height:30px;width:auto;padding:0 6px}
 .dept{display:inline-flex;align-items:center;gap:2px;border-radius:999px;padding:2px 4px 2px 10px;font:700 11.5px var(--sans,inherit);color:#fff;background:#475569;cursor:pointer}
 .dept span{opacity:.85}.dept select{width:auto;min-width:0;height:auto;border:0;background:transparent;color:#fff;font:700 11.5px inherit;padding:2px 2px;cursor:pointer;appearance:auto}
@@ -3236,6 +3238,7 @@ boEl.addEventListener('click',e=>{
   const tg=t.closest('[data-ot]'); if(tg){ const id=tg.dataset.ot; BOCOL.has(id)?BOCOL.delete(id):BOCOL.add(id); renderBo(); return; }
   const jb=t.closest('[data-jb]'); if(jb){ const [aid,oid]=jb.dataset.jb.split('|'); openJob(aid,oid); return; }
   const jv=t.closest('[data-jbv]'); if(jv){ JBV=jv.dataset.jbv; renderBo(); return; }
+  const ia=t.closest('[data-ia]'); if(ia){ itemAction(ia.dataset.ia,ia.dataset.a,ia.dataset.o,ia.dataset.v); return; }
   const qa=t.closest('[data-qa]'); if(qa){ const k=qa.dataset.qa; if(k==='paid'){ const hit=allOrders().find(x=>x.o.id===qa.dataset.o); hit.o.collected=true; renderBo(); toast(`${hit.o.number} marked paid.`); return; } boFake(k,qa.dataset.a,qa.dataset.o); return; }
   const qf=t.closest('[data-qf]'); if(qf){ const k=qf.dataset.qf; BOQ={...BOQ,q:'',co:'',stage:'',prod:'',type:'',flag:k==='flag',rush:false,status:k==='waiting'?'waiting':'open',sort:'due',page:1}; enterBo('orders'); return; }
   const b=t.closest('[data-bo]'); if(!b) return; const a=b.dataset.bo;
@@ -3268,6 +3271,7 @@ boEl.addEventListener('change',e=>{
   if(id==='jb-dept'){ JBD=v; renderBo(); return; }
   if(el.dataset.osel){ el.checked?BOSEL.add(el.dataset.osel):BOSEL.delete(el.dataset.osel); renderBo(); return; }
   if(id==='o-all'){ const vis=filteredOrders(BOQ).slice((BOQ.page-1)*BOQ.per,BOQ.page*BOQ.per); vis.forEach(x=>el.checked?BOSEL.add(x.o.id):BOSEL.delete(x.o.id)); renderBo(); return; }
+  if(el.dataset.iact){ const [oid,vid]=el.dataset.iact.split('|'), hit=allOrders().find(x=>x.o.id===oid), k=v; el.value=''; if(k&&hit) itemAction(k,hit.a.id,oid,vid); return; }
   if(el.dataset.oact){ const act=v, hit=allOrders().find(x=>x.o.id===el.dataset.oact); el.value=''; if(!act||!hit) return; boFake(act,hit.a.id,hit.o.id); return; }
   if(el.dataset.dept){ const [oid,vid]=el.dataset.dept.split('|'), hit=allOrders().find(x=>x.o.id===oid); const ver=hit&&hit.o.groups.flatMap(g=>g.versions).find(x=>x.id===vid); if(ver){ ver.dept=v; toast(`Item ${ver.line} assigned to ${DEPTS.find(d=>d[0]===v)[1]}.`); } return; }
   if(id==='dq'){ BOQ={...BOQ,q:v.trim(),status:'all',page:1}; enterBo('orders'); return; }
@@ -3522,8 +3526,9 @@ function ordersPage(){
       ${col?'':items.map(({g,v})=>`<tr class="it"><td></td><td class="num note">${v.line||''}</td>
         <td colspan="1"><div class="itm"><span class="th">${v.art?`<img src="${v.art.src}" alt="">`:''}</span><span><b class="lnk">${esc(matName(g))}</b><div class="note">Size: <b>${esc(sizeLbl(g,v))}</b> (Name: ${esc(trunc(v.name,28))})${g.fin.length?' · '+esc(finTxt(g)):''}${g.turn!=='std'?` · <span class="crit">${esc(turnById(g.turn).label)}</span>`:''}</div>${v.fileIssue?`<div class="note crit">${esc(v.fileIssue)}</div>`:''}${v.changeNote?`<div class="note warn">Customer: "${esc(trunc(v.changeNote,70))}"</div>`:''}</span></div></td>
         <td><span class="num">${pcs(v.qty)} Qty</span><div class="num note">${withAcct(a,()=>money(vTotal(g,v)))}</div></td>
-        <td>${o.status==='draft'?'':`Production: ${fmtDay(due)}<div>${itemBadge(v)}</div>`}</td>
-        <td colspan="2"><label class="dept d-${deptOf(g,v)}" title="Set automatically from the product. Pick another to reassign."><span>Dept:</span><select data-dept="${o.id}|${v.id}" aria-label="Department">${DEPTS.map(([k,l])=>`<option value="${k}"${deptOf(g,v)===k?' selected':''}>${l}</option>`).join('')}</select></label></td></tr>`).join('')}
+        <td>${o.status==='draft'?'':`Production: ${fmtDay(due)}`}</td>
+        <td><div class="istat">${o.status==='draft'?'':itemBadge(v)}<label class="dept d-${deptOf(g,v)}" title="Set automatically from the product. Pick another to reassign."><span>Dept:</span><select data-dept="${o.id}|${v.id}" aria-label="Department">${DEPTS.map(([k,l])=>`<option value="${k}"${deptOf(g,v)===k?' selected':''}>${l}</option>`).join('')}</select></label></div></td>
+        <td class="c-act">${itemActs(o,a,g,v)}</td></tr>`).join('')}
       <tr class="of"><td></td><td colspan="6"><span class="note">Payment: ${o.paidBy==='link'&&isUnpaid(o)?'Payment link sent, not paid yet':o.paidBy==='pickup'&&isUnpaid(o)?'Collect at pickup':o.status==='draft'||o.status==='approval'?'Not placed':'Credit card'} · Shipping: ${o.ship==='pickup'?'Local pickup':esc(SHIP[o.ship].label)}${o.blind?' · Blind ship':''} · ${o.proof?'Proof requested':'No proof'}${o.staffNotes?' · Note: '+esc(trunc(o.staffNotes,60)):''}</span></td></tr></tbody>`; }).join('');
   return `<div class="bo-h"><div><h1>Orders</h1><p class="note">Every order from every customer. Filter, then act on one order or a whole batch.</p></div>
       <div class="acts"><button class="btn" type="button" data-nav2="prod">Job board</button><button class="btn" type="button" data-bo="export">Export CSV</button><button class="btn pri" type="button" data-bo="newfor">${ICON.plus}New order</button></div></div>
@@ -3543,6 +3548,26 @@ function ordersPage(){
     <div class="box otw"><table class="otbl"><thead><tr><th class="c-ck"><input type="checkbox" id="o-all"${allSel?' checked':''} aria-label="Select this page"></th><th>ID</th><th>Order details</th><th>Order date &amp; amount</th><th>Order due date</th><th>Status</th><th>Action</th></tr></thead>
       ${body||'<tbody><tr><td colspan="7"><p class="note" style="padding:20px">No orders match these filters.</p></td></tr></tbody>'}</table></div>
     <div class="bulkbar"><span class="grow"></span>${pager(rows.length,Q.page,per,'o')}</div>`;
+}
+function itemActs(o,a,g,v){
+  const st=itemStage(v), done=['Shipped','Picked up'].includes(st), live=o.status==='paid';
+  const I=(k,l,ico,cls='')=>`<button type="button" class="qa ${cls}" data-ia="${k}" data-o="${o.id}" data-a="${a.id}" data-v="${v.id}" title="${l}" aria-label="${l}">${ico}</button>`;
+  const more=[...(live&&st==='Queued'?[['print','Start printing']]:[]),...(live&&st==='Printing'?[['ready','Done printing']]:[]),...(live&&!done&&st!=='Ready'?[['flag','Flag this item']]:[]),['reprint','Reprint this item'],['proof','View proof']];
+  return `<div class="qrow">${I('edit','Edit item','<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>')}${I('ticket','Print job ticket for this item','<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 8V3h10v5M6 17H4v-7h16v7h-2M7 14h10v7H7z"/></svg>')}${I('dl','Download print file','<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12m-5-5 5 5 5-5M4 21h16"/></svg>')}${live&&!done?I('fulfill',o.ship==='pickup'?'Fulfill: picked up':'Fulfill: shipped','<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="m5 12 5 5 9-10"/></svg>','good'):''}
+    <select class="cell sm" data-iact="${o.id}|${v.id}" aria-label="More for item ${v.line||''}"><option value="">More</option>${more.map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select></div>`;
+}
+function itemAction(k,aid,oid,vid){
+  const o=(ORD[aid]||[]).find(x=>x.id===oid); if(!o) return; const g=o.groups.find(g=>g.versions.some(x=>x.id===vid)), v=g.versions.find(x=>x.id===vid), a=acctById(aid);
+  const say=m=>{ renderBo(); toast(m); };
+  if(k==='edit'||k==='proof'){ openFromBo(aid,oid); selectOnly(g.versions.length>1?keyV(g,v):keyG(g)); renderAll(); if(k==='proof') openProof('view',g.versions.length>1?keyV(g,v):keyG(g)); return; }
+  if(k==='ticket'){ toast(`Job ticket for item ${v.line} (${matName(g)}, ${pcs(v.qty)} qty) sent to the shop printer.`); return; }
+  if(k==='dl'){ try{ if(v.art&&v.art.src){ const l=document.createElement('a'); l.href=v.art.src; l.download=v.name||'print-file'; document.body.appendChild(l); l.click(); l.remove(); } }catch(e){} toast(`Downloading ${v.name}.`); return; }
+  if(k==='fulfill'){ v.prod=o.ship==='pickup'?'Picked up':'Shipped'; const left=o.groups.flatMap(x=>x.versions).filter(x=>!['Shipped','Picked up'].includes(itemStage(x))).length;
+    if(!left){ setStage(o,'Done'); say(`${o.number} fully ${o.ship==='pickup'?'picked up':'shipped'}. Order closed.`); } else say(`Item ${v.line} ${o.ship==='pickup'?'picked up':'shipped'}. ${left} item${left===1?'':'s'} still open on ${o.number}.`); return; }
+  if(k==='print'){ v.prod='Printing'; say(`Item ${v.line} is printing.`); return; }
+  if(k==='ready'){ v.prod=o.ship==='pickup'?'Ready for pickup':'Ready to ship'; say(`Item ${v.line} is done printing.`); return; }
+  if(k==='flag'){ openFlag(aid,oid); return; }
+  if(k==='reprint'){ if(o.status==='done'){ toast(`Reprint of item ${v.line} started as a new job. Open the order desk to confirm.`); return; } v.prod='Queued'; v.reprint=true; say(`Item ${v.line} sent back to the print queue as a reprint.`); return; }
 }
 const isUnpaid=o=>o.status==='paid'&&(o.paidBy==='link'||o.paidBy==='pickup')&&!o.collected;
 function quickActs(o,a){
